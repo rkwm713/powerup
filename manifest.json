@@ -1,0 +1,20 @@
+{
+  "name": "Time Tracker & Reporter",
+  "details": "Track time spent on cards, monitor card movements, and generate daily reports",
+  "author": "Ryan Miller",
+  "capabilities": [
+    "card-buttons",
+    "card-detail-badges",
+    "card-back-section",
+    "board-buttons",
+    "show-settings"
+  ],
+  "connectors": {
+    "iframe": {
+      "url": "./time-tracker.html"
+    }
+  },
+  "icon": {
+    "url": "./icon.svg"
+  }
+} 

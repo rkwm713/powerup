@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Time Tracker & Reporter</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://p.trellocdn.com/power-up.min.js"></script>
+</head>
+<body>
+    <div id="time-tracker-container">
+        <div id="timer-section">
+            <h3>Time Tracker</h3>
+            <div id="current-time">00:00:00</div>
+            <button id="start-timer" class="btn btn-primary">Start Timer</button>
+            <button id="stop-timer" class="btn btn-secondary" disabled>Stop Timer</button>
+            <button id="reset-timer" class="btn btn-warning">Reset</button>
+        </div>
+
+        <div id="time-log-section">
+            <h3>Time Log</h3>
+            <div id="time-entries"></div>
+            <div id="total-time">Total: 0h 0m</div>
+        </div>
+
+        <div id="movement-log-section">
+            <h3>Card Movement History</h3>
+            <div id="movement-entries"></div>
+        </div>
+
+        <div id="manual-entry-section">
+            <h3>Add Manual Time Entry</h3>
+            <input type="number" id="manual-hours" placeholder="Hours" min="0" step="0.25">
+            <input type="number" id="manual-minutes" placeholder="Minutes" min="0" max="59">
+            <input type="text" id="manual-description" placeholder="Description">
+            <button id="add-manual-entry" class="btn btn-primary">Add Entry</button>
+        </div>
+
+        <div id="settings-section">
+            <h3>Settings</h3>
+            <label>
+                <input type="checkbox" id="auto-track"> Auto-track when card is moved to "In Progress"
+            </label>
+            <label>
+                Daily Report Email: <input type="email" id="report-email" placeholder="email@example.com">
+            </label>
+            <button id="save-settings" class="btn btn-primary">Save Settings</button>
+        </div>
+    </div>
+
+    <script src="power-up.js"></script>
+</body>
+</html> 
