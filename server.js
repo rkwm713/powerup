@@ -20,19 +20,36 @@ app.use(express.static('.'));
 let boardSettings = {};
 
 // Email transporter setup
-const emailTransporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: process.env.SMTP_PORT || 587,
-    secure: false,
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
+let emailTransporter = null;
+
+try {
+    if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+        emailTransporter = nodemailer.createTransport({
+            host: process.env.SMTP_HOST || 'smtp.gmail.com',
+            port: process.env.SMTP_PORT || 587,
+            secure: false,
+            auth: {
+                user: process.env.EMAIL_USER,
+                pass: process.env.EMAIL_PASS
+            }
+        });
+        console.log('Email transporter configured successfully');
+    } else {
+        console.warn('Email environment variables not set. Email functionality will be disabled.');
     }
-});
+} catch (error) {
+    console.error('Error setting up email transporter:', error);
+    console.warn('Email functionality will be disabled.');
+}
 
 // Routes
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'time-tracker.html'));
+});
+
+// Favicon route
+app.get('/favicon.ico', (req, res) => {
+    res.sendFile(path.join(__dirname, 'logo.png'));
 });
 
 // API Routes
@@ -56,6 +73,13 @@ app.post('/api/settings', async (req, res) => {
 
 app.post('/api/send-report', async (req, res) => {
     try {
+        if (!emailTransporter) {
+            return res.status(500).json({ 
+                success: false, 
+                error: 'Email not configured. Please set EMAIL_USER and EMAIL_PASS environment variables.' 
+            });
+        }
+
         const { reportData, email } = req.body;
         
         const htmlReport = generateHTMLReport(reportData);
@@ -110,6 +134,11 @@ cron.schedule('0 23 * * *', async () => {
 
 async function generateDailyReport(boardId, boardData) {
     try {
+        if (!emailTransporter) {
+            console.warn(`Skipping daily report for board ${boardData.boardName} - email not configured`);
+            return;
+        }
+
         // In a real implementation, you would fetch data from Trello API
         // For now, we'll create a sample report structure
         
