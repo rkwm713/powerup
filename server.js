@@ -87,7 +87,7 @@ app.post('/api/send-report', async (req, res) => {
         const mailOptions = {
             from: process.env.EMAIL_USER,
             to: email,
-            subject: `Daily Time Tracking Report - ${reportData.boardName}`,
+            subject: `Daily Card Activity Report - ${reportData.boardName}`,
             html: htmlReport
         };
         
@@ -161,7 +161,7 @@ async function generateDailyReport(boardId, boardData) {
         const mailOptions = {
             from: process.env.EMAIL_USER,
             to: boardData.settings.reportEmail,
-            subject: `Daily Time Tracking Report - ${boardData.boardName}`,
+            subject: `Daily Card Activity Report - ${boardData.boardName}`,
             html: htmlReport
         };
         
@@ -183,17 +183,13 @@ function generateHTMLReport(reportData) {
         cardsHTML = reportData.cards.map(card => `
             <div style="margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 5px;">
                 <h3 style="color: #0079bf; margin: 0 0 10px 0;">${card.name}</h3>
-                <p><strong>Total Time Tracked:</strong> ${card.totalTime}</p>
-                
-                ${card.timeEntries && card.timeEntries.length > 0 ? `
-                    <h4>Time Entries:</h4>
+                ${card.members && card.members.length > 0 ? `<p><strong>Members:</strong> ${card.members.join(', ')}</p>` : ''}
+                ${card.listDurations && Object.keys(card.listDurations).length > 0 ? `
+                    <h4>Time in Lists:</h4>
                     <ul>
-                        ${card.timeEntries.map(entry => `
-                            <li>${entry.memberName}: ${formatDuration(entry.duration)} - ${entry.description}</li>
-                        `).join('')}
+                        ${Object.entries(card.listDurations).map(([list, dur]) => `<li>${list}: ${formatDuration(dur)}</li>`).join('')}
                     </ul>
                 ` : ''}
-                
                 ${card.movements && card.movements.length > 0 ? `
                     <h4>Card Movements:</h4>
                     <ul>
@@ -205,7 +201,7 @@ function generateHTMLReport(reportData) {
             </div>
         `).join('');
     } else {
-        cardsHTML = '<p style="text-align: center; color: #666; font-style: italic;">No time tracking data found for today.</p>';
+        cardsHTML = '<p style="text-align: center; color: #666; font-style: italic;">No card activity found for today.</p>';
     }
     
     return `
@@ -213,7 +209,7 @@ function generateHTMLReport(reportData) {
         <html>
         <head>
             <meta charset="utf-8">
-            <title>Time Tracking Report</title>
+            <title>Card Activity Report</title>
             <style>
                 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background-color: #f8f9fa; }
                 .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
@@ -228,7 +224,7 @@ function generateHTMLReport(reportData) {
         <body>
             <div class="container">
                 <div class="header">
-                    <h1 style="color: #0079bf; margin: 0;">Time Tracking Report</h1>
+                    <h1 style="color: #0079bf; margin: 0;">Card Activity Report</h1>
                     <h2 style="color: #172b4d; margin: 10px 0 0 0;">${reportData.boardName}</h2>
                     <p style="color: #6c757d; margin: 10px 0 0 0;">Generated on ${reportDate} at ${reportTime}</p>
                 </div>
@@ -240,11 +236,7 @@ function generateHTMLReport(reportData) {
                         <div class="stat-label">Cards with Activity</div>
                     </div>
                     <div class="stat">
-                        <div class="stat-value">${reportData.summary ? reportData.summary.totalTimeTracked : '0h 0m'}</div>
-                        <div class="stat-label">Total Time Tracked</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-value">${reportData.summary ? reportData.summary.totalMovements : 0}</div>
+                        <div class="stat-value">${reportData.cards.reduce((sum, c) => sum + (c.movements ? c.movements.length : 0), 0)}</div>
                         <div class="stat-label">Card Movements</div>
                     </div>
                 </div>
