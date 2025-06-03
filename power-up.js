@@ -1,18 +1,13 @@
 // Time Tracker & Reporter Power-Up
 var t = TrelloPowerUp.iframe();
 
-// Timer state
-let timerInterval = null;
-let startTime = null;
-let elapsedTime = 0;
-let isRunning = false;
-
 // Data keys for Trello storage
 const STORAGE_KEYS = {
-    TIME_ENTRIES: 'timeEntries',
     MOVEMENT_ENTRIES: 'movementEntries',
+    LIST_DURATIONS: 'listDurations',
     SETTINGS: 'settings',
-    CURRENT_TIMER: 'currentTimer'
+    TRIGGERED: 'triggeredForReport',
+    CARD_MEMBERS: 'cardMembers'
 };
 
 // Initialize the power-up
@@ -23,10 +18,9 @@ document.addEventListener('DOMContentLoaded', function() {
 async function initializePowerUp() {
     try {
         // Load existing data
-        await loadTimeEntries();
         await loadMovementEntries();
+        await loadListDurations();
         await loadSettings();
-        await loadCurrentTimer();
         
         // Set up event listeners
         setupEventListeners();
@@ -44,15 +38,6 @@ async function initializePowerUp() {
 }
 
 function setupEventListeners() {
-    // Timer controls
-    document.getElementById('start-timer').addEventListener('click', startTimer);
-    document.getElementById('stop-timer').addEventListener('click', stopTimer);
-    document.getElementById('reset-timer').addEventListener('click', resetTimer);
-    
-    // Manual entry
-    document.getElementById('add-manual-entry').addEventListener('click', addManualEntry);
-    
-    // Settings
     document.getElementById('save-settings').addEventListener('click', saveSettings);
 }
 
@@ -322,7 +307,17 @@ async function checkCardMovement() {
 async function recordCardMovement(fromList, toList, card) {
     try {
         const member = await t.member('id', 'fullName');
-        
+        const cardData = await t.card('members');
+        const memberNames = cardData.members ? cardData.members.map(m => m.fullName) : [];
+        await t.set('card', 'shared', STORAGE_KEYS.CARD_MEMBERS, memberNames);
+
+        // Update list duration based on time spent in previous list
+        const durations = await t.get('card', 'shared', STORAGE_KEYS.LIST_DURATIONS) || {};
+        const spent = Date.now() - fromList.timestamp;
+        durations[fromList.listName] = (durations[fromList.listName] || 0) + spent;
+        await t.set('card', 'shared', STORAGE_KEYS.LIST_DURATIONS, durations);
+        displayListDurations(durations);
+
         const movementEntry = {
             id: Date.now().toString(),
             cardId: card.id,
@@ -337,18 +332,15 @@ async function recordCardMovement(fromList, toList, card) {
         
         const existingMovements = await getMovementEntries();
         existingMovements.push(movementEntry);
-        
+
         await t.set('card', 'shared', STORAGE_KEYS.MOVEMENT_ENTRIES, existingMovements);
         await loadMovementEntries();
-        
-        // Auto-start timer if moved to "In Progress" and setting is enabled
+
         const settings = await getSettings();
-        if (settings.autoTrack && toList.listName.toLowerCase().includes('progress')) {
-            if (!isRunning) {
-                startTimer();
-            }
+        if (settings.triggerLists && settings.triggerLists.map(l => l.toLowerCase()).includes(toList.listName.toLowerCase())) {
+            await t.set('card', 'shared', STORAGE_KEYS.TRIGGERED, true);
         }
-        
+
         console.log('Card movement recorded:', movementEntry);
     } catch (error) {
         console.error('Error recording card movement:', error);
@@ -392,24 +384,50 @@ function createMovementEntryHTML(entry) {
     `;
 }
 
+// List Duration Functions
+async function loadListDurations() {
+    try {
+        const durations = await t.get('card', 'shared', STORAGE_KEYS.LIST_DURATIONS) || {};
+        displayListDurations(durations);
+    } catch (error) {
+        console.error('Error loading list durations:', error);
+    }
+}
+
+function displayListDurations(durations) {
+    const container = document.getElementById('list-durations');
+    const lists = Object.keys(durations);
+    if (lists.length === 0) {
+        container.innerHTML = '<div class="empty-state">No list activity yet</div>';
+        return;
+    }
+
+    container.innerHTML = lists.map(list => `
+        <div class="time-entry">
+            <div class="time-entry-header">${list}</div>
+            <div class="time-entry-details">${formatDuration(durations[list])}</div>
+        </div>
+    `).join('');
+}
+
 // Settings Functions
 async function getSettings() {
     try {
         return await t.get('board', 'shared', STORAGE_KEYS.SETTINGS) || {
-            autoTrack: false,
-            reportEmail: ''
+            reportEmail: '',
+            triggerLists: []
         };
     } catch (error) {
         console.error('Error getting settings:', error);
-        return { autoTrack: false, reportEmail: '' };
+        return { reportEmail: '', triggerLists: [] };
     }
 }
 
 async function loadSettings() {
     try {
         const settings = await getSettings();
-        document.getElementById('auto-track').checked = settings.autoTrack;
         document.getElementById('report-email').value = settings.reportEmail || '';
+        document.getElementById('trigger-lists').value = settings.triggerLists ? settings.triggerLists.join(', ') : '';
     } catch (error) {
         console.error('Error loading settings:', error);
     }
@@ -418,8 +436,8 @@ async function loadSettings() {
 async function saveSettings() {
     try {
         const settings = {
-            autoTrack: document.getElementById('auto-track').checked,
-            reportEmail: document.getElementById('report-email').value
+            reportEmail: document.getElementById('report-email').value,
+            triggerLists: document.getElementById('trigger-lists').value.split(',').map(s => s.trim()).filter(Boolean)
         };
         
         await t.set('board', 'shared', STORAGE_KEYS.SETTINGS, settings);
@@ -461,48 +479,10 @@ async function saveSettingsToServer(settings) {
     }
 }
 
-// Timer State Persistence
-async function saveCurrentTimer() {
-    try {
-        const timerState = {
-            isRunning: isRunning,
-            startTime: startTime,
-            elapsedTime: elapsedTime
-        };
-        
-        await t.set('card', 'private', STORAGE_KEYS.CURRENT_TIMER, timerState);
-    } catch (error) {
-        console.error('Error saving timer state:', error);
-    }
-}
-
-async function loadCurrentTimer() {
-    try {
-        const timerState = await t.get('card', 'private', STORAGE_KEYS.CURRENT_TIMER);
-        
-        if (timerState && timerState.isRunning) {
-            startTime = timerState.startTime;
-            elapsedTime = timerState.elapsedTime;
-            
-            // Resume timer
-            startTimer();
-        }
-    } catch (error) {
-        console.error('Error loading timer state:', error);
-    }
-}
-
-async function clearCurrentTimer() {
-    try {
-        await t.remove('card', 'private', STORAGE_KEYS.CURRENT_TIMER);
-    } catch (error) {
-        console.error('Error clearing timer state:', error);
-    }
-}
 
 // Update Display
 function updateDisplay() {
-    updateTimer();
+    // Currently nothing to update periodically
 }
 
 // Initialize Trello Power-Up capabilities
@@ -521,14 +501,14 @@ TrelloPowerUp.initialize({
     },
     
     'card-detail-badges': function(t, options) {
-        return t.get('card', 'shared', STORAGE_KEYS.TIME_ENTRIES)
-            .then(function(timeEntries) {
-                if (timeEntries && timeEntries.length > 0) {
-                    const totalTime = timeEntries.reduce((sum, entry) => sum + entry.duration, 0);
+        return t.get('card', 'shared', STORAGE_KEYS.LIST_DURATIONS)
+            .then(function(durations) {
+                if (durations && Object.keys(durations).length > 0) {
+                    const total = Object.values(durations).reduce((a, b) => a + b, 0);
                     return [{
-                        text: formatDuration(totalTime),
+                        text: formatDuration(total),
                         color: 'blue',
-                        title: 'Total time tracked'
+                        title: 'Total time in lists'
                     }];
                 }
                 return [];
@@ -559,16 +539,20 @@ async function generateReport(t) {
         
         // Collect data for each card
         for (const card of board.cards) {
-            const cardTimeEntries = await t.get(card.id, 'shared', STORAGE_KEYS.TIME_ENTRIES) || [];
             const cardMovements = await t.get(card.id, 'shared', STORAGE_KEYS.MOVEMENT_ENTRIES) || [];
-            
-            if (cardTimeEntries.length > 0 || cardMovements.length > 0) {
-                const totalTime = cardTimeEntries.reduce((sum, entry) => sum + entry.duration, 0);
-                
+            const listDurations = await t.get(card.id, 'shared', STORAGE_KEYS.LIST_DURATIONS) || {};
+            const members = await t.get(card.id, 'shared', STORAGE_KEYS.CARD_MEMBERS) || [];
+            const triggered = await t.get(card.id, 'shared', STORAGE_KEYS.TRIGGERED);
+
+            if (settings.triggerLists && settings.triggerLists.length > 0 && !triggered) {
+                continue;
+            }
+
+            if (cardMovements.length > 0) {
                 reportData.cards.push({
                     name: card.name,
-                    totalTime: formatDuration(totalTime),
-                    timeEntries: cardTimeEntries,
+                    members: members,
+                    listDurations: listDurations,
                     movements: cardMovements
                 });
             }
@@ -580,7 +564,7 @@ async function generateReport(t) {
         }
         
         // Show report summary
-        alert(`Report generated for ${reportData.cards.length} cards with time tracking data.`);
+        alert(`Report generated for ${reportData.cards.length} cards.`);
         
     } catch (error) {
         console.error('Error generating report:', error);
