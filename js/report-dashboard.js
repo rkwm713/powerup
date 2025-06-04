@@ -2,6 +2,16 @@ var t = window.TrelloPowerUp.iframe();
 var boardData = {};
 var charts = {};
 
+// Add error handling for iframe communication
+window.addEventListener('error', function(e) {
+    console.warn('Handled error:', e.message);
+    // Don't let postMessage errors break the power-up
+    if (e.message.includes('postMessage') || e.message.includes('origin')) {
+        e.preventDefault();
+        return false;
+    }
+});
+
 // Initialize the dashboard with better error handling
 t.render(function() {
     console.log('Dashboard rendering started');
@@ -388,7 +398,7 @@ function renderMemberActivityChart() {
     }
     
     charts.memberActivity = new Chart(ctx, {
-        type: 'horizontalBar',
+        type: 'bar',
         data: {
             labels: Object.keys(memberActivity),
             datasets: [{
@@ -400,6 +410,7 @@ function renderMemberActivityChart() {
             }]
         },
         options: {
+            indexAxis: 'y',
             responsive: true,
             maintainAspectRatio: false,
             scales: {
