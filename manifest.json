@@ -1,17 +1,23 @@
 {
-  "name": "Board Time Tracker & Reporter",
-  "details": "Board-wide time tracking and reporting - monitor card movements across your entire board and generate reports on demand or daily at 5 PM Central Time",
-  "author": "Ryan Miller",
+  "name": "Advanced Trello Reports",
+  "details": "Comprehensive reporting and analytics for Trello boards - similar to Blue Cat Reports. Track productivity, analyze workflows, and generate detailed insights.",
+  "author": "Your Company",
   "capabilities": [
-    "board-buttons",
-    "show-settings"
+    "board-buttons"
   ],
   "connectors": {
     "iframe": {
-      "url": "./time-tracker.html"
+      "url": "./index.html"
     }
   },
   "icon": {
-    "url": "./logo.png"
-  }
+    "url": "./icon.svg"
+  },
+  "tags": [
+    "reporting",
+    "analytics",
+    "productivity",
+    "dashboard",
+    "charts"
+  ]
 } 

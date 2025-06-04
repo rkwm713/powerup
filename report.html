@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="https://p.trellocdn.com/power-up.min.css">
+    <script src="https://p.trellocdn.com/power-up.min.js"></script>
+    <style>
+        .list-container {
+            margin: 20px;
+            padding: 15px;
+            border: 1px solid #dfe1e6;
+            border-radius: 3px;
+        }
+        .card-item {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f4f5f7;
+            border-radius: 3px;
+        }
+        .member-avatar {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        .duration {
+            color: #6b778c;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div id="report-content"></div>
+    <script>
+        var t = window.TrelloPowerUp.iframe();
+        
+        function formatDuration(date) {
+            const now = new Date();
+            const cardDate = new Date(date);
+            const diffTime = Math.abs(now - cardDate);
+            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+            
+            if (diffDays === 0) return 'Today';
+            if (diffDays === 1) return 'Yesterday';
+            return `${diffDays} days ago`;
+        }
+
+        function renderReport(lists, cards, members) {
+            const content = document.getElementById('report-content');
+            let html = '';
+
+            lists.forEach(list => {
+                const listCards = cards.filter(card => card.idList === list.id);
+                
+                html += `
+                    <div class="list-container">
+                        <h2>${list.name}</h2>
+                        ${listCards.map(card => {
+                            const cardMembers = card.idMembers.map(memberId => {
+                                const member = members.find(m => m.id === memberId);
+                                return member ? `
+                                    <img src="${member.avatarUrl}/30.png" 
+                                         alt="${member.fullName}" 
+                                         title="${member.fullName}"
+                                         class="member-avatar">` : '';
+                            }).join('');
+                            
+                            return `
+                                <div class="card-item">
+                                    <h3>${card.name}</h3>
+                                    <div class="members">${cardMembers}</div>
+                                    <div class="duration">
+                                        In list for: ${formatDuration(card.dateLastActivity)}
+                                    </div>
+                                </div>`;
+                        }).join('')}
+                    </div>`;
+            });
+
+            content.innerHTML = html;
+        }
+
+        t.render(function() {
+            Promise.all([
+                t.board('all'),
+                t.cards('all'),
+                t.members('all')
+            ]).then(function([board, cards, members]) {
+                renderReport(board.lists, cards, members);
+            });
+        });
+    </script>
+</body>
+</html> 

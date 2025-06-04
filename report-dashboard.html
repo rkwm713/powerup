@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="https://p.trellocdn.com/power-up.min.css">
+    <script src="https://p.trellocdn.com/power-up.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .dashboard-container {
+            max-width: 100%;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .report-tabs {
+            display: flex;
+            border-bottom: 2px solid #dfe1e6;
+            margin-bottom: 20px;
+        }
+        .tab {
+            padding: 12px 20px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            font-weight: 500;
+        }
+        .tab.active {
+            border-bottom-color: #0079bf;
+            color: #0079bf;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .filters {
+            background: #f4f5f7;
+            padding: 15px;
+            border-radius: 3px;
+            margin-bottom: 20px;
+        }
+        .filter-group {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .chart-container {
+            background: white;
+            border: 1px solid #dfe1e6;
+            border-radius: 3px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .metric-card {
+            background: white;
+            border: 1px solid #dfe1e6;
+            border-radius: 3px;
+            padding: 20px;
+            text-align: center;
+        }
+        .metric-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #0079bf;
+        }
+        .metric-label {
+            color: #6b778c;
+            margin-top: 5px;
+        }
+        .report-section {
+            background: white;
+            border: 1px solid #dfe1e6;
+            border-radius: 3px;
+            margin-bottom: 20px;
+        }
+        .section-header {
+            background: #f4f5f7;
+            padding: 15px 20px;
+            border-bottom: 1px solid #dfe1e6;
+            font-weight: bold;
+        }
+        .section-content {
+            padding: 20px;
+        }
+        .card-list-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .member-badge {
+            display: inline-block;
+            background: #0079bf;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            margin-right: 5px;
+        }
+        .export-btn {
+            background: #0079bf;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 3px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        .chart-wrapper {
+            position: relative;
+            height: 300px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <div class="report-tabs">
+            <button class="tab active" onclick="showTab('overview')">Overview</button>
+            <button class="tab" onclick="showTab('productivity')">Productivity</button>
+            <button class="tab" onclick="showTab('workflow')">Workflow</button>
+            <button class="tab" onclick="showTab('team')">Team Analysis</button>
+            <button class="tab" onclick="showTab('detailed')">Detailed Report</button>
+        </div>
+
+        <div class="filters">
+            <div class="filter-group">
+                <label>Date Range:</label>
+                <select id="dateRange">
+                    <option value="7">Last 7 days</option>
+                    <option value="30" selected>Last 30 days</option>
+                    <option value="90">Last 90 days</option>
+                    <option value="all">All time</option>
+                </select>
+                
+                <label>Lists:</label>
+                <select id="listFilter" multiple>
+                    <option value="all" selected>All Lists</option>
+                </select>
+                
+                <label>Members:</label>
+                <select id="memberFilter" multiple>
+                    <option value="all" selected>All Members</option>
+                </select>
+                
+                <button class="export-btn" onclick="exportReport()">Export CSV</button>
+                <button class="export-btn" onclick="refreshData()">Refresh</button>
+            </div>
+        </div>
+
+        <!-- Overview Tab -->
+        <div id="overview-tab" class="tab-content active">
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-value" id="totalCards">0</div>
+                    <div class="metric-label">Total Cards</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="completedCards">0</div>
+                    <div class="metric-label">Completed</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="activeMembers">0</div>
+                    <div class="metric-label">Active Members</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="avgTimeInList">0</div>
+                    <div class="metric-label">Avg Days in List</div>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <h3>Cards by List</h3>
+                <div class="chart-wrapper">
+                    <canvas id="cardsByListChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <h3>Completion Trend (Last 30 Days)</h3>
+                <div class="chart-wrapper">
+                    <canvas id="completionTrendChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Productivity Tab -->
+        <div id="productivity-tab" class="tab-content">
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-value" id="cardsPerDay">0</div>
+                    <div class="metric-label">Cards/Day</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="avgCycleTime">0</div>
+                    <div class="metric-label">Avg Cycle Time</div>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <h3>Member Productivity</h3>
+                <div class="chart-wrapper">
+                    <canvas id="memberProductivityChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <h3>Work Distribution</h3>
+                <div class="chart-wrapper">
+                    <canvas id="workDistributionChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Workflow Tab -->
+        <div id="workflow-tab" class="tab-content">
+            <div class="report-section">
+                <div class="section-header">Cards by Time in List</div>
+                <div class="section-content" id="timeInListReport"></div>
+            </div>
+
+            <div class="chart-container">
+                <h3>Workflow Bottlenecks</h3>
+                <div class="chart-wrapper">
+                    <canvas id="bottleneckChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Team Analysis Tab -->
+        <div id="team-tab" class="tab-content">
+            <div class="report-section">
+                <div class="section-header">Team Workload</div>
+                <div class="section-content" id="teamWorkloadReport"></div>
+            </div>
+
+            <div class="chart-container">
+                <h3>Member Activity</h3>
+                <div class="chart-wrapper">
+                    <canvas id="memberActivityChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detailed Report Tab -->
+        <div id="detailed-tab" class="tab-content">
+            <div class="report-section">
+                <div class="section-header">Detailed Card Analysis</div>
+                <div class="section-content" id="detailedReport"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="./js/report-dashboard.js"></script>
+</body>
+</html> 
