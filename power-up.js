@@ -1,13 +1,22 @@
-// Time Tracker & Reporter Power-Up
+// Time Tracker & Reporter Power-Up - Board-Wide Version
 var t = TrelloPowerUp.iframe();
 
 // Data keys for Trello storage
 const STORAGE_KEYS = {
     MOVEMENT_ENTRIES: 'movementEntries',
     LIST_DURATIONS: 'listDurations',
+    TIME_ENTRIES: 'timeEntries',
     SETTINGS: 'settings',
     TRIGGERED: 'triggeredForReport',
     CARD_MEMBERS: 'cardMembers'
+};
+
+// Global variables for board-wide data
+let allBoardData = {
+    cards: [],
+    totalTimeTracked: 0,
+    totalMovements: 0,
+    settings: {}
 };
 
 // Initialize the power-up
@@ -17,21 +26,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
 async function initializePowerUp() {
     try {
-        // Load existing data
-        await loadMovementEntries();
-        await loadListDurations();
+        // Load board-wide data
+        await loadBoardData();
         await loadSettings();
         
         // Set up event listeners
         setupEventListeners();
         
-        // Start monitoring card movements
-        startCardMovementMonitoring();
-        
         // Update display
         updateDisplay();
         
-        console.log('Time Tracker Power-Up initialized successfully');
+        console.log('Board-Wide Time Tracker Power-Up initialized successfully');
     } catch (error) {
         console.error('Error initializing power-up:', error);
     }
@@ -39,71 +44,239 @@ async function initializePowerUp() {
 
 function setupEventListeners() {
     document.getElementById('save-settings').addEventListener('click', saveSettings);
+    document.getElementById('generate-report-now').addEventListener('click', generateReportNow);
+    document.getElementById('refresh-data').addEventListener('click', refreshBoardData);
 }
 
-// Timer Functions
-function startTimer() {
-    if (!isRunning) {
-        startTime = Date.now() - elapsedTime;
-        isRunning = true;
+// Board Data Loading Functions
+async function loadBoardData() {
+    try {
+        const board = await t.board('id', 'name', 'cards');
+        allBoardData.cards = [];
+        allBoardData.totalTimeTracked = 0;
+        allBoardData.totalMovements = 0;
         
-        timerInterval = setInterval(updateTimer, 1000);
+        // Load data for each card
+        for (const card of board.cards) {
+            try {
+                const cardMovements = await t.get(card.id, 'shared', STORAGE_KEYS.MOVEMENT_ENTRIES) || [];
+                const listDurations = await t.get(card.id, 'shared', STORAGE_KEYS.LIST_DURATIONS) || {};
+                const timeEntries = await t.get(card.id, 'shared', STORAGE_KEYS.TIME_ENTRIES) || [];
+                const members = await t.get(card.id, 'shared', STORAGE_KEYS.CARD_MEMBERS) || [];
+                
+                const totalCardTime = timeEntries.reduce((sum, entry) => sum + entry.duration, 0);
+                const totalListTime = Object.values(listDurations).reduce((sum, duration) => sum + duration, 0);
+                
+                allBoardData.cards.push({
+                    id: card.id,
+                    name: card.name,
+                    movements: cardMovements,
+                    listDurations: listDurations,
+                    timeEntries: timeEntries,
+                    members: members,
+                    totalTime: totalCardTime + totalListTime
+                });
+                
+                allBoardData.totalTimeTracked += totalCardTime + totalListTime;
+                allBoardData.totalMovements += cardMovements.length;
+            } catch (cardError) {
+                console.warn(`Error loading data for card ${card.name}:`, cardError);
+            }
+        }
         
-        document.getElementById('start-timer').disabled = true;
-        document.getElementById('stop-timer').disabled = false;
-        
-        // Save current timer state
-        saveCurrentTimer();
-        
-        console.log('Timer started');
+        console.log('Board data loaded:', allBoardData);
+        updateBoardDisplay();
+    } catch (error) {
+        console.error('Error loading board data:', error);
     }
 }
 
-function stopTimer() {
-    if (isRunning) {
-        clearInterval(timerInterval);
-        isRunning = false;
-        
-        document.getElementById('start-timer').disabled = false;
-        document.getElementById('stop-timer').disabled = true;
-        
-        // Save the time entry
-        saveTimeEntry();
-        
-        console.log('Timer stopped');
+function updateBoardDisplay() {
+    // Update summary stats
+    document.getElementById('total-cards').textContent = allBoardData.cards.length;
+    document.getElementById('total-time-tracked').textContent = formatDuration(allBoardData.totalTimeTracked);
+    document.getElementById('total-movements').textContent = allBoardData.totalMovements;
+    
+    // Update cards display
+    displayBoardCards();
+    displayBoardMovements();
+    displayBoardListDurations();
+}
+
+function displayBoardCards() {
+    const container = document.getElementById('board-cards');
+    
+    if (allBoardData.cards.length === 0) {
+        container.innerHTML = '<div class="empty-state">No cards with activity found</div>';
+        return;
+    }
+    
+    const cardsWithActivity = allBoardData.cards.filter(card => 
+        card.movements.length > 0 || card.timeEntries.length > 0 || Object.keys(card.listDurations).length > 0
+    );
+    
+    if (cardsWithActivity.length === 0) {
+        container.innerHTML = '<div class="empty-state">No cards with activity found</div>';
+        return;
+    }
+    
+    container.innerHTML = cardsWithActivity.map(card => `
+        <div class="card-summary">
+            <div class="card-header">
+                <h4>${card.name}</h4>
+                <span class="total-time">${formatDuration(card.totalTime)}</span>
+            </div>
+            ${card.members.length > 0 ? `<p class="card-members">Members: ${card.members.join(', ')}</p>` : ''}
+            ${card.timeEntries.length > 0 ? `<p class="time-entries-count">${card.timeEntries.length} time entries</p>` : ''}
+            ${card.movements.length > 0 ? `<p class="movements-count">${card.movements.length} movements</p>` : ''}
+            ${Object.keys(card.listDurations).length > 0 ? `
+                <div class="list-durations-summary">
+                    <strong>List Times:</strong>
+                    ${Object.entries(card.listDurations).map(([list, duration]) => 
+                        `<span class="list-duration">${list}: ${formatDuration(duration)}</span>`
+                    ).join(', ')}
+                </div>
+            ` : ''}
+        </div>
+    `).join('');
+}
+
+function displayBoardMovements() {
+    const container = document.getElementById('board-movements');
+    const allMovements = allBoardData.cards.flatMap(card => 
+        card.movements.map(movement => ({...movement, cardName: card.name}))
+    ).sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    if (allMovements.length === 0) {
+        container.innerHTML = '<div class="empty-state">No card movements yet</div>';
+        return;
+    }
+    
+    // Show only the latest 20 movements
+    const recentMovements = allMovements.slice(0, 20);
+    
+    container.innerHTML = recentMovements.map(movement => `
+        <div class="movement-entry">
+            <div class="movement-header">
+                <strong>${movement.cardName}</strong>: ${movement.fromList} → ${movement.toList}
+            </div>
+            <div class="movement-details">
+                ${movement.memberName} • ${new Date(movement.date).toLocaleDateString()} ${new Date(movement.date).toLocaleTimeString()}
+            </div>
+        </div>
+    `).join('');
+    
+    if (allMovements.length > 20) {
+        container.innerHTML += `<div class="more-info">... and ${allMovements.length - 20} more movements</div>`;
     }
 }
 
-function resetTimer() {
-    clearInterval(timerInterval);
-    isRunning = false;
-    elapsedTime = 0;
-    startTime = null;
+function displayBoardListDurations() {
+    const container = document.getElementById('board-list-durations');
+    const aggregatedDurations = {};
     
-    document.getElementById('start-timer').disabled = false;
-    document.getElementById('stop-timer').disabled = true;
-    document.getElementById('current-time').textContent = '00:00:00';
+    // Aggregate list durations across all cards
+    allBoardData.cards.forEach(card => {
+        Object.entries(card.listDurations).forEach(([list, duration]) => {
+            aggregatedDurations[list] = (aggregatedDurations[list] || 0) + duration;
+        });
+    });
     
-    // Clear saved timer state
-    clearCurrentTimer();
+    const lists = Object.keys(aggregatedDurations);
+    if (lists.length === 0) {
+        container.innerHTML = '<div class="empty-state">No list activity yet</div>';
+        return;
+    }
     
-    console.log('Timer reset');
+    // Sort by duration (highest first)
+    const sortedLists = lists.sort((a, b) => aggregatedDurations[b] - aggregatedDurations[a]);
+    
+    container.innerHTML = sortedLists.map(list => `
+        <div class="list-duration-item">
+            <div class="list-name">${list}</div>
+            <div class="list-duration">${formatDuration(aggregatedDurations[list])}</div>
+        </div>
+    `).join('');
 }
 
-function updateTimer() {
-    if (isRunning && startTime) {
-        elapsedTime = Date.now() - startTime;
-        document.getElementById('current-time').textContent = formatTime(elapsedTime);
+async function refreshBoardData() {
+    const refreshBtn = document.getElementById('refresh-data');
+    refreshBtn.disabled = true;
+    refreshBtn.textContent = 'Refreshing...';
+    
+    try {
+        await loadBoardData();
+        refreshBtn.textContent = 'Data Refreshed!';
+        setTimeout(() => {
+            refreshBtn.disabled = false;
+            refreshBtn.textContent = 'Refresh Data';
+        }, 2000);
+    } catch (error) {
+        console.error('Error refreshing data:', error);
+        refreshBtn.textContent = 'Error - Try Again';
+        setTimeout(() => {
+            refreshBtn.disabled = false;
+            refreshBtn.textContent = 'Refresh Data';
+        }, 2000);
     }
 }
 
-function formatTime(milliseconds) {
-    const totalSeconds = Math.floor(milliseconds / 1000);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
+// Manual Report Generation
+async function generateReportNow() {
+    const generateBtn = document.getElementById('generate-report-now');
+    generateBtn.disabled = true;
+    generateBtn.textContent = 'Generating Report...';
     
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    try {
+        const settings = await getSettings();
+        
+        if (!settings.reportEmail) {
+            alert('Please set a report email address in the settings first.');
+            return;
+        }
+        
+        const board = await t.board('id', 'name');
+        
+        const reportData = {
+            boardName: board.name,
+            generatedAt: new Date().toISOString(),
+            period: 'Manual Report - ' + new Date().toLocaleDateString(),
+            cards: allBoardData.cards.filter(card => 
+                card.movements.length > 0 || 
+                card.timeEntries.length > 0 || 
+                Object.keys(card.listDurations).length > 0
+            ),
+            summary: {
+                totalCards: allBoardData.cards.filter(card => 
+                    card.movements.length > 0 || 
+                    card.timeEntries.length > 0 || 
+                    Object.keys(card.listDurations).length > 0
+                ).length,
+                totalTimeTracked: formatDuration(allBoardData.totalTimeTracked),
+                totalMovements: allBoardData.totalMovements,
+                activeMembers: [...new Set(allBoardData.cards.flatMap(card => card.members))].length
+            }
+        };
+        
+        await sendReport(reportData, settings.reportEmail);
+        
+        generateBtn.textContent = 'Report Sent!';
+        alert(`Report successfully sent to ${settings.reportEmail}`);
+        
+        setTimeout(() => {
+            generateBtn.disabled = false;
+            generateBtn.textContent = 'Generate Report Now';
+        }, 3000);
+        
+    } catch (error) {
+        console.error('Error generating report:', error);
+        alert('Error generating report. Please check your settings and try again.');
+        generateBtn.textContent = 'Error - Try Again';
+        setTimeout(() => {
+            generateBtn.disabled = false;
+            generateBtn.textContent = 'Generate Report Now';
+        }, 3000);
+    }
 }
 
 function formatDuration(milliseconds) {
@@ -116,298 +289,6 @@ function formatDuration(milliseconds) {
     } else {
         return `${minutes}m`;
     }
-}
-
-// Time Entry Functions
-async function saveTimeEntry() {
-    if (elapsedTime > 0) {
-        const member = await t.member('id', 'fullName');
-        const card = await t.card('id', 'name');
-        
-        const timeEntry = {
-            id: Date.now().toString(),
-            cardId: card.id,
-            cardName: card.name,
-            memberId: member.id,
-            memberName: member.fullName,
-            duration: elapsedTime,
-            startTime: startTime,
-            endTime: Date.now(),
-            date: new Date().toISOString(),
-            description: 'Timer session'
-        };
-        
-        await addTimeEntry(timeEntry);
-        resetTimer();
-    }
-}
-
-async function addTimeEntry(entry) {
-    try {
-        const existingEntries = await getTimeEntries();
-        existingEntries.push(entry);
-        
-        await t.set('card', 'shared', STORAGE_KEYS.TIME_ENTRIES, existingEntries);
-        await loadTimeEntries();
-        
-        console.log('Time entry added:', entry);
-    } catch (error) {
-        console.error('Error adding time entry:', error);
-    }
-}
-
-async function getTimeEntries() {
-    try {
-        return await t.get('card', 'shared', STORAGE_KEYS.TIME_ENTRIES) || [];
-    } catch (error) {
-        console.error('Error getting time entries:', error);
-        return [];
-    }
-}
-
-async function loadTimeEntries() {
-    try {
-        const entries = await getTimeEntries();
-        const container = document.getElementById('time-entries');
-        
-        if (entries.length === 0) {
-            container.innerHTML = '<div class="empty-state">No time entries yet</div>';
-        } else {
-            container.innerHTML = entries.map(entry => createTimeEntryHTML(entry)).join('');
-        }
-        
-        // Update total time
-        const totalTime = entries.reduce((sum, entry) => sum + entry.duration, 0);
-        document.getElementById('total-time').textContent = `Total: ${formatDuration(totalTime)}`;
-        
-    } catch (error) {
-        console.error('Error loading time entries:', error);
-    }
-}
-
-function createTimeEntryHTML(entry) {
-    return `
-        <div class="time-entry">
-            <div class="time-entry-header">
-                ${formatDuration(entry.duration)} - ${entry.memberName}
-                <button class="delete-btn" onclick="deleteTimeEntry('${entry.id}')">×</button>
-            </div>
-            <div class="time-entry-details">
-                ${entry.description} • ${new Date(entry.date).toLocaleDateString()} ${new Date(entry.date).toLocaleTimeString()}
-            </div>
-        </div>
-    `;
-}
-
-async function deleteTimeEntry(entryId) {
-    try {
-        const entries = await getTimeEntries();
-        const filteredEntries = entries.filter(entry => entry.id !== entryId);
-        
-        await t.set('card', 'shared', STORAGE_KEYS.TIME_ENTRIES, filteredEntries);
-        await loadTimeEntries();
-        
-        console.log('Time entry deleted:', entryId);
-    } catch (error) {
-        console.error('Error deleting time entry:', error);
-    }
-}
-
-// Manual Entry Functions
-async function addManualEntry() {
-    const hoursInput = document.getElementById('manual-hours');
-    const minutesInput = document.getElementById('manual-minutes');
-    const descriptionInput = document.getElementById('manual-description');
-    
-    const hours = parseFloat(hoursInput.value) || 0;
-    const minutes = parseFloat(minutesInput.value) || 0;
-    const description = descriptionInput.value || 'Manual entry';
-    
-    if (hours === 0 && minutes === 0) {
-        alert('Please enter a valid time amount');
-        return;
-    }
-    
-    try {
-        const member = await t.member('id', 'fullName');
-        const card = await t.card('id', 'name');
-        
-        const duration = (hours * 60 + minutes) * 60 * 1000; // Convert to milliseconds
-        
-        const timeEntry = {
-            id: Date.now().toString(),
-            cardId: card.id,
-            cardName: card.name,
-            memberId: member.id,
-            memberName: member.fullName,
-            duration: duration,
-            startTime: Date.now() - duration,
-            endTime: Date.now(),
-            date: new Date().toISOString(),
-            description: description
-        };
-        
-        await addTimeEntry(timeEntry);
-        
-        // Clear form
-        hoursInput.value = '';
-        minutesInput.value = '';
-        descriptionInput.value = '';
-        
-        console.log('Manual entry added:', timeEntry);
-    } catch (error) {
-        console.error('Error adding manual entry:', error);
-    }
-}
-
-// Card Movement Tracking
-async function startCardMovementMonitoring() {
-    try {
-        // Listen for card movements
-        const card = await t.card('id', 'name');
-        const list = await t.list('id', 'name');
-        
-        // Store current list as baseline
-        await t.set('card', 'private', 'currentList', {
-            listId: list.id,
-            listName: list.name,
-            timestamp: Date.now()
-        });
-        
-        // Set up periodic checking for movement
-        setInterval(checkCardMovement, 5000); // Check every 5 seconds
-        
-    } catch (error) {
-        console.error('Error setting up card movement monitoring:', error);
-    }
-}
-
-async function checkCardMovement() {
-    try {
-        const card = await t.card('id', 'name');
-        const currentList = await t.list('id', 'name');
-        const storedList = await t.get('card', 'private', 'currentList');
-        
-        if (storedList && storedList.listId !== currentList.id) {
-            // Card has moved!
-            await recordCardMovement(storedList, currentList, card);
-            
-            // Update stored list
-            await t.set('card', 'private', 'currentList', {
-                listId: currentList.id,
-                listName: currentList.name,
-                timestamp: Date.now()
-            });
-        }
-    } catch (error) {
-        console.error('Error checking card movement:', error);
-    }
-}
-
-async function recordCardMovement(fromList, toList, card) {
-    try {
-        const member = await t.member('id', 'fullName');
-        const cardData = await t.card('members');
-        const memberNames = cardData.members ? cardData.members.map(m => m.fullName) : [];
-        await t.set('card', 'shared', STORAGE_KEYS.CARD_MEMBERS, memberNames);
-
-        // Update list duration based on time spent in previous list
-        const durations = await t.get('card', 'shared', STORAGE_KEYS.LIST_DURATIONS) || {};
-        const spent = Date.now() - fromList.timestamp;
-        durations[fromList.listName] = (durations[fromList.listName] || 0) + spent;
-        await t.set('card', 'shared', STORAGE_KEYS.LIST_DURATIONS, durations);
-        displayListDurations(durations);
-
-        const movementEntry = {
-            id: Date.now().toString(),
-            cardId: card.id,
-            cardName: card.name,
-            memberId: member.id,
-            memberName: member.fullName,
-            fromList: fromList.listName,
-            toList: toList.listName,
-            timestamp: Date.now(),
-            date: new Date().toISOString()
-        };
-        
-        const existingMovements = await getMovementEntries();
-        existingMovements.push(movementEntry);
-
-        await t.set('card', 'shared', STORAGE_KEYS.MOVEMENT_ENTRIES, existingMovements);
-        await loadMovementEntries();
-
-        const settings = await getSettings();
-        if (settings.triggerLists && settings.triggerLists.map(l => l.toLowerCase()).includes(toList.listName.toLowerCase())) {
-            await t.set('card', 'shared', STORAGE_KEYS.TRIGGERED, true);
-        }
-
-        console.log('Card movement recorded:', movementEntry);
-    } catch (error) {
-        console.error('Error recording card movement:', error);
-    }
-}
-
-async function getMovementEntries() {
-    try {
-        return await t.get('card', 'shared', STORAGE_KEYS.MOVEMENT_ENTRIES) || [];
-    } catch (error) {
-        console.error('Error getting movement entries:', error);
-        return [];
-    }
-}
-
-async function loadMovementEntries() {
-    try {
-        const entries = await getMovementEntries();
-        const container = document.getElementById('movement-entries');
-        
-        if (entries.length === 0) {
-            container.innerHTML = '<div class="empty-state">No card movements yet</div>';
-        } else {
-            container.innerHTML = entries.map(entry => createMovementEntryHTML(entry)).join('');
-        }
-    } catch (error) {
-        console.error('Error loading movement entries:', error);
-    }
-}
-
-function createMovementEntryHTML(entry) {
-    return `
-        <div class="movement-entry">
-            <div class="time-entry-header">
-                ${entry.fromList} → ${entry.toList}
-            </div>
-            <div class="time-entry-details">
-                ${entry.memberName} • ${new Date(entry.date).toLocaleDateString()} ${new Date(entry.date).toLocaleTimeString()}
-            </div>
-        </div>
-    `;
-}
-
-// List Duration Functions
-async function loadListDurations() {
-    try {
-        const durations = await t.get('card', 'shared', STORAGE_KEYS.LIST_DURATIONS) || {};
-        displayListDurations(durations);
-    } catch (error) {
-        console.error('Error loading list durations:', error);
-    }
-}
-
-function displayListDurations(durations) {
-    const container = document.getElementById('list-durations');
-    const lists = Object.keys(durations);
-    if (lists.length === 0) {
-        container.innerHTML = '<div class="empty-state">No list activity yet</div>';
-        return;
-    }
-
-    container.innerHTML = lists.map(list => `
-        <div class="time-entry">
-            <div class="time-entry-header">${list}</div>
-            <div class="time-entry-details">${formatDuration(durations[list])}</div>
-        </div>
-    `).join('');
 }
 
 // Settings Functions
@@ -426,6 +307,7 @@ async function getSettings() {
 async function loadSettings() {
     try {
         const settings = await getSettings();
+        allBoardData.settings = settings;
         document.getElementById('report-email').value = settings.reportEmail || '';
         document.getElementById('trigger-lists').value = settings.triggerLists ? settings.triggerLists.join(', ') : '';
     } catch (error) {
@@ -441,6 +323,7 @@ async function saveSettings() {
         };
         
         await t.set('board', 'shared', STORAGE_KEYS.SETTINGS, settings);
+        allBoardData.settings = settings;
         
         // Also save to server for daily report scheduling
         await saveSettingsToServer(settings);
@@ -457,7 +340,6 @@ async function saveSettingsToServer(settings) {
     try {
         const board = await t.board('id', 'name');
         
-        // This would typically send to your server endpoint
         const response = await fetch('/api/settings', {
             method: 'POST',
             headers: {
@@ -476,99 +358,6 @@ async function saveSettingsToServer(settings) {
     } catch (error) {
         console.error('Error saving settings to server:', error);
         // Don't throw error as local settings are still saved
-    }
-}
-
-
-// Update Display
-function updateDisplay() {
-    // Currently nothing to update periodically
-}
-
-// Initialize Trello Power-Up capabilities
-TrelloPowerUp.initialize({
-    'card-buttons': function(t, options) {
-        return [{
-            text: 'Time Tracker',
-            callback: function(t) {
-                return t.popup({
-                    title: 'Time Tracker & Reporter',
-                    url: './time-tracker.html',
-                    height: 600
-                });
-            }
-        }];
-    },
-    
-    'card-detail-badges': function(t, options) {
-        return t.get('card', 'shared', STORAGE_KEYS.LIST_DURATIONS)
-            .then(function(durations) {
-                if (durations && Object.keys(durations).length > 0) {
-                    const total = Object.values(durations).reduce((a, b) => a + b, 0);
-                    return [{
-                        text: formatDuration(total),
-                        color: 'blue',
-                        title: 'Total time in lists'
-                    }];
-                }
-                return [];
-            });
-    },
-    
-    'board-buttons': function(t, options) {
-        return [{
-            text: 'Generate Report',
-            callback: function(t) {
-                return generateReport(t);
-            }
-        }];
-    }
-});
-
-// Report Generation
-async function generateReport(t) {
-    try {
-        const board = await t.board('id', 'name', 'cards');
-        const settings = await getSettings();
-        
-        let reportData = {
-            boardName: board.name,
-            generatedAt: new Date().toISOString(),
-            cards: []
-        };
-        
-        // Collect data for each card
-        for (const card of board.cards) {
-            const cardMovements = await t.get(card.id, 'shared', STORAGE_KEYS.MOVEMENT_ENTRIES) || [];
-            const listDurations = await t.get(card.id, 'shared', STORAGE_KEYS.LIST_DURATIONS) || {};
-            const members = await t.get(card.id, 'shared', STORAGE_KEYS.CARD_MEMBERS) || [];
-            const triggered = await t.get(card.id, 'shared', STORAGE_KEYS.TRIGGERED);
-
-            if (settings.triggerLists && settings.triggerLists.length > 0 && !triggered) {
-                continue;
-            }
-
-            if (cardMovements.length > 0) {
-                reportData.cards.push({
-                    name: card.name,
-                    members: members,
-                    listDurations: listDurations,
-                    movements: cardMovements
-                });
-            }
-        }
-        
-        // Send report via email if configured
-        if (settings.reportEmail) {
-            await sendReport(reportData, settings.reportEmail);
-        }
-        
-        // Show report summary
-        alert(`Report generated for ${reportData.cards.length} cards.`);
-        
-    } catch (error) {
-        console.error('Error generating report:', error);
-        alert('Error generating report. Please try again.');
     }
 }
 
@@ -592,5 +381,36 @@ async function sendReport(reportData, email) {
         console.log('Report sent successfully');
     } catch (error) {
         console.error('Error sending report:', error);
+        throw error;
     }
-} 
+}
+
+// Update Display
+function updateDisplay() {
+    updateBoardDisplay();
+}
+
+// Initialize Trello Power-Up capabilities - BOARD-WIDE VERSION
+TrelloPowerUp.initialize({
+    'board-buttons': function(t, options) {
+        return [{
+            text: 'Time Tracker & Reporter',
+            callback: function(t) {
+                return t.popup({
+                    title: 'Board Time Tracker & Reporter',
+                    url: './time-tracker.html',
+                    height: 700,
+                    width: 600
+                });
+            }
+        }];
+    },
+    
+    'show-settings': function(t, options) {
+        return t.popup({
+            title: 'Time Tracker Settings',
+            url: './time-tracker.html#settings',
+            height: 400
+        });
+    }
+}); 

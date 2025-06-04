@@ -1,11 +1,8 @@
 {
-  "name": "Time Tracker & Reporter",
-  "details": "Track time spent on cards, monitor card movements, and generate daily reports",
+  "name": "Board Time Tracker & Reporter",
+  "details": "Board-wide time tracking and reporting - monitor card movements across your entire board and generate reports on demand or daily at 5 PM Central Time",
   "author": "Ryan Miller",
   "capabilities": [
-    "card-buttons",
-    "card-detail-badges",
-    "card-back-section",
     "board-buttons",
     "show-settings"
   ],

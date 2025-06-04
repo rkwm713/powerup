@@ -2,32 +2,89 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Time Tracker & Reporter</title>
+    <title>Board Time Tracker & Reporter</title>
     <link rel="icon" type="image/png" href="./logo.png">
     <link rel="stylesheet" href="styles.css">
     <script src="https://p.trellocdn.com/power-up.min.js"></script>
 </head>
 <body>
     <div id="time-tracker-container">
+        <!-- Header -->
+        <div id="header-section">
+            <h2>📊 Board Time Tracker & Reporter</h2>
+            <button id="refresh-data" class="btn btn-secondary">Refresh Data</button>
+        </div>
+
+        <!-- Summary Dashboard -->
+        <div id="summary-section">
+            <h3>📈 Board Summary</h3>
+            <div class="summary-stats">
+                <div class="stat-item">
+                    <div class="stat-value" id="total-cards">0</div>
+                    <div class="stat-label">Total Cards</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="total-time-tracked">0h 0m</div>
+                    <div class="stat-label">Time Tracked</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="total-movements">0</div>
+                    <div class="stat-label">Card Movements</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Manual Report Generation -->
+        <div id="report-section">
+            <h3>📧 Generate Report</h3>
+            <p>Send a detailed activity report for all cards on this board right now.</p>
+            <button id="generate-report-now" class="btn btn-primary btn-large">Generate Report Now</button>
+        </div>
+
+        <!-- Cards Overview -->
+        <div id="cards-section">
+            <h3>🃏 Cards with Activity</h3>
+            <div id="board-cards"></div>
+        </div>
+
+        <!-- Recent Movements -->
+        <div id="movements-section">
+            <h3>🔄 Recent Card Movements</h3>
+            <div id="board-movements"></div>
+        </div>
+
+        <!-- List Duration Analytics -->
         <div id="list-duration-section">
-            <h3>List Durations</h3>
-            <div id="list-durations"></div>
+            <h3>⏱️ Time Spent in Lists (Board-wide)</h3>
+            <div id="board-list-durations"></div>
         </div>
 
-        <div id="movement-log-section">
-            <h3>Card Movement History</h3>
-            <div id="movement-entries"></div>
-        </div>
-
+        <!-- Settings -->
         <div id="settings-section">
-            <h3>Settings</h3>
-            <label>
-                Trigger Lists (comma separated): <input type="text" id="trigger-lists" placeholder="Done">
-            </label>
-            <label>
-                Daily Report Email: <input type="email" id="report-email" placeholder="email@example.com">
-            </label>
-            <button id="save-settings" class="btn btn-primary">Save Settings</button>
+            <h3>⚙️ Settings</h3>
+            <div class="settings-form">
+                <label>
+                    <strong>Daily Report Email:</strong>
+                    <input type="email" id="report-email" placeholder="email@example.com" class="input-field">
+                    <small>Reports are automatically sent daily at 5 PM Central Time</small>
+                </label>
+                
+                <label>
+                    <strong>Trigger Lists (comma separated):</strong>
+                    <input type="text" id="trigger-lists" placeholder="Done, Completed, Archived" class="input-field">
+                    <small>Cards moved to these lists will be included in reports</small>
+                </label>
+                
+                <button id="save-settings" class="btn btn-primary">Save Settings</button>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div id="footer-section">
+            <p class="footer-text">
+                ⏰ Daily reports are sent automatically at 5 PM Central Time<br>
+                📧 Use "Generate Report Now" to send a report immediately
+            </p>
         </div>
     </div>
 

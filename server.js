@@ -112,6 +112,66 @@ app.post('/api/send-report', async (req, res) => {
     }
 });
 
+// New endpoint for immediate report generation
+app.post('/api/generate-immediate-report', async (req, res) => {
+    try {
+        if (!emailTransporter) {
+            return res.status(500).json({ 
+                success: false, 
+                error: 'Email not configured. Please set EMAIL_USER and EMAIL_PASS environment variables.' 
+            });
+        }
+
+        const { boardId, boardName, email } = req.body;
+        
+        // Get board settings
+        const boardData = boardSettings[boardId];
+        if (!boardData) {
+            return res.status(404).json({ 
+                success: false, 
+                error: 'Board settings not found. Please save settings first.' 
+            });
+        }
+
+        // Create report data structure for immediate report
+        const reportData = {
+            boardName: boardName,
+            generatedAt: new Date().toISOString(),
+            period: 'Manual Report - ' + new Date().toLocaleDateString(),
+            cards: [], // This would be populated from Trello API data in a real implementation
+            summary: {
+                totalCards: 0,
+                totalTimeTracked: '0h 0m',
+                totalMovements: 0,
+                activeMembers: 0
+            }
+        };
+        
+        // Send the report
+        const htmlReport = generateHTMLReport(reportData);
+        
+        const mailOptions = {
+            from: process.env.EMAIL_USER,
+            to: email,
+            subject: `Manual Card Activity Report - ${boardName}`,
+            html: htmlReport
+        };
+        
+        await emailTransporter.sendMail(mailOptions);
+        
+        console.log(`Manual report sent to ${email} for board: ${boardName}`);
+        res.json({ 
+            success: true, 
+            message: 'Manual report sent successfully',
+            sentTo: email,
+            boardName: boardName
+        });
+    } catch (error) {
+        console.error('Error generating immediate report:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 app.get('/api/settings/:boardId', (req, res) => {
     try {
         const { boardId } = req.params;
