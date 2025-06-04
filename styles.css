@@ -427,4 +427,168 @@ h3:first-child {
         align-items: flex-start;
         gap: 8px;
     }
+}
+
+/* Package Prep Section */
+#package-prep-section {
+    margin-bottom: 24px;
+    background: linear-gradient(135deg, #f8fff9, #e8f5e8);
+    padding: 20px;
+    border-radius: 8px;
+    border: 2px solid #28a745;
+}
+
+#package-prep-section h3 {
+    color: #28a745;
+    margin-top: 0;
+}
+
+.package-prep-card {
+    border-left-color: #28a745 !important;
+    background: white;
+    border: 1px solid #28a745;
+}
+
+.package-prep-card .total-time {
+    background: #28a745;
+}
+
+.package-prep-date {
+    font-size: 14px;
+    color: #28a745;
+    font-weight: 600;
+    margin: 8px 0;
+}
+
+/* Complete Cards Section */
+#complete-section {
+    margin-bottom: 24px;
+    background: linear-gradient(135deg, #f0f8ff, #e8f4fd);
+    padding: 20px;
+    border-radius: 8px;
+    border: 2px solid #007bff;
+}
+
+#complete-section h3 {
+    color: #007bff;
+    margin-top: 0;
+}
+
+.complete-card {
+    border-left-color: #007bff !important;
+    background: white;
+    border: 1px solid #007bff;
+}
+
+.complete-card .total-time {
+    background: #007bff;
+}
+
+.status-date {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 8px 0;
+}
+
+.package-prep-card .status-date {
+    color: #28a745;
+}
+
+.complete-card .status-date {
+    color: #007bff;
+}
+
+/* Enhanced card member display */
+.card-members {
+    font-size: 14px;
+    color: #172b4d;
+    margin: 8px 0;
+    background: #f4f5f7;
+    padding: 6px 10px;
+    border-radius: 4px;
+    border-left: 3px solid #0079bf;
+}
+
+.current-duration {
+    font-size: 14px;
+    color: #e67e22;
+    margin: 8px 0;
+    background: #fef9e7;
+    padding: 6px 10px;
+    border-radius: 4px;
+    border-left: 3px solid #e67e22;
+}
+
+/* Movement details with assigned members */
+.movement-details {
+    font-size: 12px;
+    color: #6c757d;
+    line-height: 1.4;
+}
+
+.movement-details em {
+    color: #0079bf;
+    font-style: normal;
+    font-size: 11px;
+}
+
+/* Enhanced stat item for special statuses */
+.stat-item .stat-value[id="package-prep-count"] {
+    color: #28a745;
+}
+
+.stat-item .stat-value[id="complete-count"] {
+    color: #007bff;
+}
+
+/* List duration enhancements */
+.list-durations-summary {
+    margin-top: 12px;
+    font-size: 12px;
+    background: #f8f9fa;
+    padding: 8px;
+    border-radius: 4px;
+    border: 1px solid #dfe1e6;
+}
+
+.list-durations-summary strong {
+    color: #172b4d;
+    display: block;
+    margin-bottom: 6px;
+}
+
+.list-duration {
+    display: inline-block;
+    background: #e3f2fd;
+    color: #1976d2;
+    padding: 3px 8px;
+    border-radius: 12px;
+    margin-right: 8px;
+    margin-top: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    border: 1px solid #bbdefb;
+}
+
+/* Responsive enhancements */
+@media (max-width: 640px) {
+    #package-prep-section,
+    #complete-section {
+        padding: 16px;
+        margin: 16px -16px 24px -16px;
+        border-radius: 0;
+    }
+    
+    .card-members,
+    .current-duration {
+        margin: 6px -10px;
+        padding: 8px 10px;
+        border-radius: 0;
+    }
+    
+    .list-durations-summary {
+        margin: 8px -10px;
+        padding: 10px;
+        border-radius: 0;
+    }
 } 

@@ -8,7 +8,28 @@ const STORAGE_KEYS = {
     TIME_ENTRIES: 'timeEntries',
     SETTINGS: 'settings',
     TRIGGERED: 'triggeredForReport',
-    CARD_MEMBERS: 'cardMembers'
+    CARD_MEMBERS: 'cardMembers',
+    PACKAGE_PREP_FLAG: 'packagePrepFlag',
+    COMPLETE_FLAG: 'completeFlag',
+    LIST_TIMESTAMPS: 'listTimestamps'
+};
+
+// Special tracking for multiple boards
+const BOARD_CONFIGS = {
+    CPS_DESIGNER: {
+        BOARD_NAME: 'CPS Designer',
+        TARGET_LIST: 'Ready for Package Prep',
+        REPORT_GROUP: 'Sent for Final Package Prep',
+        FLAG_KEY: 'packagePrepFlag',
+        MATCH_TYPE: 'exact'
+    },
+    CPS_DELIVERY: {
+        BOARD_NAME: 'CPS Delivery Service',
+        TARGET_LIST_PATTERN: 'Complete *',
+        REPORT_GROUP: 'Fully Complete',
+        FLAG_KEY: 'completeFlag',
+        MATCH_TYPE: 'wildcard'
+    }
 };
 
 // Global variables for board-wide data
@@ -16,7 +37,9 @@ let allBoardData = {
     cards: [],
     totalTimeTracked: 0,
     totalMovements: 0,
-    settings: {}
+    settings: {},
+    packagePrepCards: [], // Special tracking for package prep cards
+    completeCards: [] // Special tracking for complete cards
 };
 
 // Initialize the power-up
@@ -33,6 +56,9 @@ async function initializePowerUp() {
         // Set up event listeners
         setupEventListeners();
         
+        // Start monitoring card movements (for real-time tracking)
+        await startBoardMovementMonitoring();
+        
         // Update display
         updateDisplay();
         
@@ -48,6 +74,161 @@ function setupEventListeners() {
     document.getElementById('refresh-data').addEventListener('click', refreshBoardData);
 }
 
+// Board Movement Monitoring for Real-time Tracking
+async function startBoardMovementMonitoring() {
+    try {
+        const board = await t.board('id', 'name');
+        console.log(`Starting movement monitoring for board: ${board.name}`);
+        
+        // Set up periodic checking for movements (every 30 seconds)
+        setInterval(async () => {
+            await checkBoardMovements();
+        }, 30000);
+        
+    } catch (error) {
+        console.error('Error setting up board movement monitoring:', error);
+    }
+}
+
+async function checkBoardMovements() {
+    try {
+        const board = await t.board('id', 'name', 'cards');
+        
+        // Check each card for movements and current status
+        for (const card of board.cards) {
+            await updateCardStatus(card, board);
+        }
+    } catch (error) {
+        console.error('Error checking board movements:', error);
+    }
+}
+
+function matchesBoardConfig(boardName, listName) {
+    for (const configKey in BOARD_CONFIGS) {
+        const config = BOARD_CONFIGS[configKey];
+        
+        if (config.BOARD_NAME === boardName) {
+            if (config.MATCH_TYPE === 'exact') {
+                return config.TARGET_LIST === listName ? config : null;
+            } else if (config.MATCH_TYPE === 'wildcard') {
+                const pattern = config.TARGET_LIST_PATTERN.replace('*', '.*');
+                const regex = new RegExp(`^${pattern}`, 'i');
+                return regex.test(listName) ? config : null;
+            }
+        }
+    }
+    return null;
+}
+
+async function updateCardStatus(card, board) {
+    try {
+        // Get card's current list
+        const cardDetails = await t.get(card.id, 'shared', 'currentListInfo');
+        const currentList = await t.card('list', 'members').then(data => data.list);
+        const currentMembers = await t.card('members').then(data => data.members || []);
+        
+        // Store current members
+        const memberNames = currentMembers.map(m => m.fullName);
+        await t.set(card.id, 'shared', STORAGE_KEYS.CARD_MEMBERS, memberNames);
+        
+        // Check if list changed
+        if (!cardDetails || cardDetails.listId !== currentList.id) {
+            await recordCardMovement(card, cardDetails, currentList, board, memberNames);
+            
+            // Update current list info
+            await t.set(card.id, 'shared', 'currentListInfo', {
+                listId: currentList.id,
+                listName: currentList.name,
+                timestamp: Date.now()
+            });
+        }
+        
+        // Update list durations
+        await updateListDurations(card.id, cardDetails, currentList);
+        
+        // Check for special board configurations
+        const matchedConfig = matchesBoardConfig(board.name, currentList.name);
+        if (matchedConfig) {
+            await markCardForSpecialStatus(card.id, memberNames, matchedConfig);
+        }
+        
+    } catch (error) {
+        console.warn(`Error updating status for card ${card.name}:`, error);
+    }
+}
+
+async function recordCardMovement(card, fromListInfo, toList, board, members) {
+    try {
+        const currentMember = await t.member('id', 'fullName');
+        
+        // Calculate time spent in previous list
+        if (fromListInfo) {
+            const timeSpent = Date.now() - fromListInfo.timestamp;
+            const durations = await t.get(card.id, 'shared', STORAGE_KEYS.LIST_DURATIONS) || {};
+            durations[fromListInfo.listName] = (durations[fromListInfo.listName] || 0) + timeSpent;
+            await t.set(card.id, 'shared', STORAGE_KEYS.LIST_DURATIONS, durations);
+        }
+        
+        const movementEntry = {
+            id: Date.now().toString(),
+            cardId: card.id,
+            cardName: card.name,
+            memberId: currentMember.id,
+            memberName: currentMember.fullName,
+            fromList: fromListInfo ? fromListInfo.listName : 'Unknown',
+            toList: toList.name,
+            timestamp: Date.now(),
+            date: new Date().toISOString(),
+            boardName: board.name,
+            assignedMembers: members
+        };
+        
+        const existingMovements = await t.get(card.id, 'shared', STORAGE_KEYS.MOVEMENT_ENTRIES) || [];
+        existingMovements.push(movementEntry);
+        await t.set(card.id, 'shared', STORAGE_KEYS.MOVEMENT_ENTRIES, existingMovements);
+        
+        console.log('Card movement recorded:', movementEntry);
+    } catch (error) {
+        console.error('Error recording card movement:', error);
+    }
+}
+
+async function updateListDurations(cardId, fromListInfo, currentList) {
+    try {
+        if (fromListInfo && fromListInfo.listName !== currentList.name) {
+            const timeSpent = Date.now() - fromListInfo.timestamp;
+            const durations = await t.get(cardId, 'shared', STORAGE_KEYS.LIST_DURATIONS) || {};
+            durations[fromListInfo.listName] = (durations[fromListInfo.listName] || 0) + timeSpent;
+            await t.set(cardId, 'shared', STORAGE_KEYS.LIST_DURATIONS, durations);
+        }
+        
+        // Update current list entry timestamp
+        const timestamps = await t.get(cardId, 'shared', STORAGE_KEYS.LIST_TIMESTAMPS) || {};
+        timestamps[currentList.name] = Date.now();
+        await t.set(cardId, 'shared', STORAGE_KEYS.LIST_TIMESTAMPS, timestamps);
+        
+    } catch (error) {
+        console.error('Error updating list durations:', error);
+    }
+}
+
+async function markCardForSpecialStatus(cardId, members, config) {
+    try {
+        const statusInfo = {
+            markedAt: Date.now(),
+            date: new Date().toISOString(),
+            members: members,
+            reportGroup: config.REPORT_GROUP,
+            boardConfig: config.BOARD_NAME
+        };
+        
+        await t.set(cardId, 'shared', STORAGE_KEYS[config.FLAG_KEY.toUpperCase()], statusInfo);
+        console.log(`Card ${cardId} marked for ${config.REPORT_GROUP} with members:`, members);
+    } catch (error) {
+        console.error(`Error marking card for ${config.REPORT_GROUP}:`, error);
+    }
+}
+
 // Board Data Loading Functions
 async function loadBoardData() {
     try {
@@ -55,6 +236,8 @@ async function loadBoardData() {
         allBoardData.cards = [];
         allBoardData.totalTimeTracked = 0;
         allBoardData.totalMovements = 0;
+        allBoardData.packagePrepCards = [];
+        allBoardData.completeCards = [];
         
         // Load data for each card
         for (const card of board.cards) {
@@ -63,19 +246,39 @@ async function loadBoardData() {
                 const listDurations = await t.get(card.id, 'shared', STORAGE_KEYS.LIST_DURATIONS) || {};
                 const timeEntries = await t.get(card.id, 'shared', STORAGE_KEYS.TIME_ENTRIES) || [];
                 const members = await t.get(card.id, 'shared', STORAGE_KEYS.CARD_MEMBERS) || [];
+                const packagePrepFlag = await t.get(card.id, 'shared', STORAGE_KEYS.PACKAGE_PREP_FLAG);
+                const completeFlag = await t.get(card.id, 'shared', STORAGE_KEYS.COMPLETE_FLAG);
+                const listTimestamps = await t.get(card.id, 'shared', STORAGE_KEYS.LIST_TIMESTAMPS) || {};
                 
                 const totalCardTime = timeEntries.reduce((sum, entry) => sum + entry.duration, 0);
                 const totalListTime = Object.values(listDurations).reduce((sum, duration) => sum + duration, 0);
                 
-                allBoardData.cards.push({
+                // Calculate current list duration (time spent in current list so far)
+                const currentListDuration = await calculateCurrentListDuration(card.id, listTimestamps);
+                
+                const cardData = {
                     id: card.id,
                     name: card.name,
                     movements: cardMovements,
                     listDurations: listDurations,
                     timeEntries: timeEntries,
                     members: members,
-                    totalTime: totalCardTime + totalListTime
-                });
+                    totalTime: totalCardTime + totalListTime,
+                    packagePrepFlag: packagePrepFlag,
+                    completeFlag: completeFlag,
+                    currentListDuration: currentListDuration,
+                    listTimestamps: listTimestamps
+                };
+                
+                allBoardData.cards.push(cardData);
+                
+                // Track special status cards separately
+                if (packagePrepFlag) {
+                    allBoardData.packagePrepCards.push(cardData);
+                }
+                if (completeFlag) {
+                    allBoardData.completeCards.push(cardData);
+                }
                 
                 allBoardData.totalTimeTracked += totalCardTime + totalListTime;
                 allBoardData.totalMovements += cardMovements.length;
@@ -91,16 +294,141 @@ async function loadBoardData() {
     }
 }
 
+async function calculateCurrentListDuration(cardId, listTimestamps) {
+    try {
+        // Get current list
+        const currentList = await t.card('list').then(data => data.list);
+        if (listTimestamps[currentList.name]) {
+            return Date.now() - listTimestamps[currentList.name];
+        }
+        return 0;
+    } catch (error) {
+        return 0;
+    }
+}
+
 function updateBoardDisplay() {
     // Update summary stats
-    document.getElementById('total-cards').textContent = allBoardData.cards.length;
+    const cardsWithActivity = allBoardData.cards.filter(card => 
+        card.movements.length > 0 || card.timeEntries.length > 0 || Object.keys(card.listDurations).length > 0
+    );
+    
+    document.getElementById('total-cards').textContent = cardsWithActivity.length;
     document.getElementById('total-time-tracked').textContent = formatDuration(allBoardData.totalTimeTracked);
     document.getElementById('total-movements').textContent = allBoardData.totalMovements;
+    
+    // Add special status counts if any
+    updateSpecialStatusCounts();
     
     // Update cards display
     displayBoardCards();
     displayBoardMovements();
     displayBoardListDurations();
+    displaySpecialStatusCards();
+}
+
+function updateSpecialStatusCounts() {
+    // Update package prep count
+    if (allBoardData.packagePrepCards.length > 0) {
+        updateOrCreateStatItem('package-prep-count', allBoardData.packagePrepCards.length, 'Ready for Package Prep', '#28a745');
+    }
+    
+    // Update complete cards count
+    if (allBoardData.completeCards.length > 0) {
+        updateOrCreateStatItem('complete-count', allBoardData.completeCards.length, 'Fully Complete', '#007bff');
+    }
+}
+
+function updateOrCreateStatItem(id, value, label, color) {
+    const existingElement = document.getElementById(id);
+    if (existingElement) {
+        existingElement.textContent = value;
+    } else {
+        // Add stat dynamically
+        const summaryStats = document.querySelector('.summary-stats');
+        summaryStats.innerHTML += `
+            <div class="stat-item">
+                <div class="stat-value" id="${id}" style="color: ${color};">${value}</div>
+                <div class="stat-label">${label}</div>
+            </div>
+        `;
+    }
+}
+
+function displaySpecialStatusCards() {
+    // Display package prep cards
+    displayPackagePrepCards();
+    
+    // Display complete cards
+    displayCompleteCards();
+}
+
+function displayPackagePrepCards() {
+    // Add package prep section if there are any cards
+    if (allBoardData.packagePrepCards.length > 0) {
+        let packagePrepSection = document.getElementById('package-prep-section');
+        
+        if (!packagePrepSection) {
+            // Create package prep section
+            const cardsSection = document.getElementById('cards-section');
+            packagePrepSection = document.createElement('div');
+            packagePrepSection.id = 'package-prep-section';
+            packagePrepSection.innerHTML = `
+                <h3>📦 ${BOARD_CONFIGS.CPS_DESIGNER.REPORT_GROUP}</h3>
+                <div id="package-prep-cards"></div>
+            `;
+            cardsSection.parentNode.insertBefore(packagePrepSection, cardsSection.nextSibling);
+        }
+        
+        const container = document.getElementById('package-prep-cards');
+        container.innerHTML = allBoardData.packagePrepCards.map(card => createSpecialStatusCardHTML(card, 'package-prep-card')).join('');
+    }
+}
+
+function displayCompleteCards() {
+    // Add complete cards section if there are any cards
+    if (allBoardData.completeCards.length > 0) {
+        let completeSection = document.getElementById('complete-section');
+        
+        if (!completeSection) {
+            // Create complete section
+            const insertAfter = document.getElementById('package-prep-section') || document.getElementById('cards-section');
+            completeSection = document.createElement('div');
+            completeSection.id = 'complete-section';
+            completeSection.innerHTML = `
+                <h3>✅ ${BOARD_CONFIGS.CPS_DELIVERY.REPORT_GROUP}</h3>
+                <div id="complete-cards"></div>
+            `;
+            insertAfter.parentNode.insertBefore(completeSection, insertAfter.nextSibling);
+        }
+        
+        const container = document.getElementById('complete-cards');
+        container.innerHTML = allBoardData.completeCards.map(card => createSpecialStatusCardHTML(card, 'complete-card')).join('');
+    }
+}
+
+function createSpecialStatusCardHTML(card, cssClass) {
+    const statusFlag = card.packagePrepFlag || card.completeFlag;
+    const statusType = card.packagePrepFlag ? 'Ready Since' : 'Completed';
+    
+    return `
+        <div class="card-summary ${cssClass}">
+            <div class="card-header">
+                <h4>${card.name}</h4>
+                <span class="total-time">${formatDuration(card.totalTime)}</span>
+            </div>
+            <p class="card-members"><strong>Assigned Members:</strong> ${card.members.join(', ') || 'None assigned'}</p>
+            <p class="status-date"><strong>${statusType}:</strong> ${new Date(statusFlag.date).toLocaleDateString()} ${new Date(statusFlag.date).toLocaleTimeString()}</p>
+            ${Object.keys(card.listDurations).length > 0 ? `
+                <div class="list-durations-summary">
+                    <strong>Time in Each Status:</strong>
+                    ${Object.entries(card.listDurations).map(([list, duration]) => 
+                        `<span class="list-duration">${list}: ${formatDuration(duration)}</span>`
+                    ).join(', ')}
+                </div>
+            ` : ''}
+        </div>
+    `;
 }
 
 function displayBoardCards() {
@@ -126,16 +454,19 @@ function displayBoardCards() {
                 <h4>${card.name}</h4>
                 <span class="total-time">${formatDuration(card.totalTime)}</span>
             </div>
-            ${card.members.length > 0 ? `<p class="card-members">Members: ${card.members.join(', ')}</p>` : ''}
+            ${card.members.length > 0 ? `<p class="card-members"><strong>Assigned Members:</strong> ${card.members.join(', ')}</p>` : ''}
             ${card.timeEntries.length > 0 ? `<p class="time-entries-count">${card.timeEntries.length} time entries</p>` : ''}
             ${card.movements.length > 0 ? `<p class="movements-count">${card.movements.length} movements</p>` : ''}
             ${Object.keys(card.listDurations).length > 0 ? `
                 <div class="list-durations-summary">
-                    <strong>List Times:</strong>
+                    <strong>Time in Each Status:</strong>
                     ${Object.entries(card.listDurations).map(([list, duration]) => 
                         `<span class="list-duration">${list}: ${formatDuration(duration)}</span>`
                     ).join(', ')}
                 </div>
+            ` : ''}
+            ${card.currentListDuration > 0 ? `
+                <p class="current-duration"><strong>Current Status Duration:</strong> ${formatDuration(card.currentListDuration)}</p>
             ` : ''}
         </div>
     `).join('');
@@ -162,6 +493,7 @@ function displayBoardMovements() {
             </div>
             <div class="movement-details">
                 ${movement.memberName} • ${new Date(movement.date).toLocaleDateString()} ${new Date(movement.date).toLocaleTimeString()}
+                ${movement.assignedMembers ? `<br><em>Assigned: ${movement.assignedMembers.join(', ')}</em>` : ''}
             </div>
         </div>
     `).join('');
@@ -232,26 +564,33 @@ async function generateReportNow() {
         
         if (!settings.reportEmail) {
             alert('Please set a report email address in the settings first.');
+            generateBtn.disabled = false;
+            generateBtn.textContent = 'Generate Report Now';
             return;
         }
         
         const board = await t.board('id', 'name');
         
+        // Separate regular cards from special status cards
+        const regularCards = allBoardData.cards.filter(card => 
+            !card.packagePrepFlag && !card.completeFlag && (
+                card.movements.length > 0 || 
+                card.timeEntries.length > 0 || 
+                Object.keys(card.listDurations).length > 0
+            )
+        );
+        
         const reportData = {
             boardName: board.name,
             generatedAt: new Date().toISOString(),
             period: 'Manual Report - ' + new Date().toLocaleDateString(),
-            cards: allBoardData.cards.filter(card => 
-                card.movements.length > 0 || 
-                card.timeEntries.length > 0 || 
-                Object.keys(card.listDurations).length > 0
-            ),
+            cards: regularCards,
+            packagePrepCards: allBoardData.packagePrepCards,
+            completeCards: allBoardData.completeCards,
             summary: {
-                totalCards: allBoardData.cards.filter(card => 
-                    card.movements.length > 0 || 
-                    card.timeEntries.length > 0 || 
-                    Object.keys(card.listDurations).length > 0
-                ).length,
+                totalCards: regularCards.length,
+                packagePrepCards: allBoardData.packagePrepCards.length,
+                completeCards: allBoardData.completeCards.length,
                 totalTimeTracked: formatDuration(allBoardData.totalTimeTracked),
                 totalMovements: allBoardData.totalMovements,
                 activeMembers: [...new Set(allBoardData.cards.flatMap(card => card.members))].length
