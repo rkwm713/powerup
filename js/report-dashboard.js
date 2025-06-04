@@ -15,7 +15,26 @@ window.addEventListener('error', function(e) {
 // Initialize the dashboard with better error handling
 t.render(function() {
     console.log('Dashboard rendering started');
+    
+    // Size the iframe to utilize the available space
+    t.sizeTo('#dashboard-container').then(function() {
+        console.log('Dashboard sized successfully');
+    }).catch(function(error) {
+        console.warn('Could not resize dashboard:', error);
+    });
+    
     loadBoardData();
+});
+
+// Add resize handler for responsive charts
+window.addEventListener('resize', function() {
+    if (charts && Object.keys(charts).length > 0) {
+        Object.values(charts).forEach(chart => {
+            if (chart && typeof chart.resize === 'function') {
+                chart.resize();
+            }
+        });
+    }
 });
 
 function loadBoardData() {
@@ -24,19 +43,29 @@ function loadBoardData() {
     // Use the Trello provided Promise to ensure compatibility
     var Promise = window.TrelloPowerUp.Promise;
     
+    // Try multiple approaches to get the data
     Promise.all([
-        t.board('all'),
+        t.board('id', 'name', 'lists'),
         t.cards('all'), 
+        t.lists('all'),
         t.members('all')
-    ]).then(function([board, cards, members]) {
-        console.log('Board data loaded successfully', { board, cards, members });
+    ]).then(function([board, cards, lists, members]) {
+        console.log('Board data loaded successfully', { board, cards, lists, members });
+        
+        // Fallback: if lists are empty from t.lists(), try getting from board
+        const finalLists = (lists && lists.length > 0) ? lists : (board.lists || []);
         
         boardData = {
             board: board,
             cards: cards || [],
             members: members || [],
-            lists: board.lists || []
+            lists: finalLists
         };
+        
+        console.log('Processed board data:', boardData);
+        console.log('Lists available:', boardData.lists.length);
+        console.log('Members available:', boardData.members.length);
+        console.log('Cards available:', boardData.cards.length);
         
         populateFilters();
         calculateMetrics();
@@ -44,7 +73,33 @@ function loadBoardData() {
         renderReports();
     }).catch(function(error) {
         console.error('Error loading board data:', error);
-        showErrorMessage('Failed to load board data. Please refresh and try again.');
+        
+        // Fallback: try basic data loading
+        console.log('Attempting fallback data loading...');
+        
+        Promise.all([
+            t.board('all'),
+            t.cards('all')
+        ]).then(function([board, cards]) {
+            console.log('Fallback data loaded:', { board, cards });
+            
+            boardData = {
+                board: board,
+                cards: cards || [],
+                members: board.members || [],
+                lists: board.lists || []
+            };
+            
+            console.log('Fallback processed board data:', boardData);
+            
+            populateFilters();
+            calculateMetrics();
+            renderCharts();
+            renderReports();
+        }).catch(function(fallbackError) {
+            console.error('Fallback loading also failed:', fallbackError);
+            showErrorMessage('Failed to load board data. Please refresh and try again.');
+        });
     });
 }
 
@@ -72,25 +127,46 @@ function populateFilters() {
         return;
     }
     
+    console.log('Populating filters with data:', {
+        lists: boardData.lists,
+        members: boardData.members
+    });
+    
     // Clear existing options except "All"
     listFilter.innerHTML = '<option value="all" selected>All Lists</option>';
     memberFilter.innerHTML = '<option value="all" selected>All Members</option>';
     
     // Populate lists
-    boardData.lists.forEach(list => {
-        const option = document.createElement('option');
-        option.value = list.id;
-        option.textContent = t.safe(list.name);
-        listFilter.appendChild(option);
-    });
+    if (boardData.lists && boardData.lists.length > 0) {
+        boardData.lists.forEach(list => {
+            if (list && list.id && list.name) {
+                const option = document.createElement('option');
+                option.value = list.id;
+                option.textContent = list.name;
+                listFilter.appendChild(option);
+                console.log('Added list:', list.name);
+            }
+        });
+    } else {
+        console.warn('No lists found in board data');
+    }
     
     // Populate members
-    boardData.members.forEach(member => {
-        const option = document.createElement('option');
-        option.value = member.id;
-        option.textContent = t.safe(member.fullName);
-        memberFilter.appendChild(option);
-    });
+    if (boardData.members && boardData.members.length > 0) {
+        boardData.members.forEach(member => {
+            if (member && member.id && (member.fullName || member.username)) {
+                const option = document.createElement('option');
+                option.value = member.id;
+                option.textContent = member.fullName || member.username;
+                memberFilter.appendChild(option);
+                console.log('Added member:', member.fullName || member.username);
+            }
+        });
+    } else {
+        console.warn('No members found in board data');
+    }
+    
+    console.log('Filters populated successfully');
 }
 
 function calculateMetrics() {
