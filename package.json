@@ -2,11 +2,11 @@
   "name": "trello-advanced-reports-powerup",
   "version": "1.0.0",
   "description": "Advanced reporting Power-Up for Trello boards similar to Blue Cat Reports",
-  "main": "index.html",
+  "main": "server.js",
   "scripts": {
-    "start": "serve -s . -p 3000",
+    "start": "node server.js",
     "build": "echo 'No build process needed for static files'",
-    "dev": "serve -s . -p 3000"
+    "dev": "node server.js"
   },
   "keywords": [
     "trello",
@@ -18,6 +18,13 @@
   ],
   "author": "Your Name",
   "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "node-cron": "^3.0.2",
+    "nodemailer": "^6.9.7",
+    "dotenv": "^16.3.1"
+  },
   "devDependencies": {
     "serve": "^14.2.4"
   },
