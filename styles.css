@@ -81,13 +81,7 @@ h3:first-child {
     cursor: not-allowed;
 }
 
-#timer-section {
-    text-align: center;
-    padding-bottom: 16px;
-    border-bottom: 1px solid #ddd;
-}
-
-#time-entries, #movement-entries {
+#list-durations, #movement-entries {
     max-height: 200px;
     overflow-y: auto;
     margin-bottom: 12px;
@@ -116,33 +110,7 @@ h3:first-child {
     border-left-color: #61bd4f;
 }
 
-#total-time {
-    font-weight: bold;
-    text-align: right;
-    color: #172b4d;
-    padding: 8px 0;
-    border-top: 1px solid #ddd;
-}
 
-#manual-entry-section {
-    padding-top: 16px;
-    border-top: 1px solid #ddd;
-}
-
-#manual-entry-section input {
-    width: 100%;
-    padding: 8px 12px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    margin-bottom: 8px;
-    font-size: 14px;
-}
-
-#manual-entry-section input:focus {
-    outline: none;
-    border-color: #0079bf;
-    box-shadow: 0 0 0 2px rgba(0, 121, 191, 0.2);
-}
 
 #settings-section {
     padding-top: 16px;

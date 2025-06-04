@@ -1,19 +1,17 @@
-# Trello Time Tracker & Reporter Power-Up
+# Trello Card Activity Reporter Power-Up
 
-A comprehensive Trello Power-Up that tracks time spent on cards, monitors card movements between lists, and generates automated daily reports via email.
+A Trello Power-Up that tracks card movements between lists, records how long each card stays in a list, and generates automated daily reports via email.
 
 ## Features
 
-### ⏱️ Time Tracking
-- **Visual Timer**: Start/stop/reset timer with real-time display
-- **Manual Time Entry**: Add time entries manually with custom descriptions
-- **Timer Persistence**: Timer continues running even when closing the power-up
-- **Total Time Display**: Shows total time tracked per card as a badge
+### 📝 Card Insights
+- **Member Tracking**: Stores members assigned to each card
+- **List Durations**: Automatically calculates time spent in every list
+- **Daily Triggers**: Specify lists that add cards to the daily report when entered
 
 ### 📊 Card Movement Tracking
 - **Automatic Detection**: Monitors when cards move between lists
 - **Movement History**: Complete log of all card movements with timestamps
-- **Auto-Timer Start**: Optionally start timer when card moves to "In Progress"
 
 ### 📧 Daily Reports
 - **Scheduled Reports**: Automatically generated daily at 5 PM Central Time
@@ -87,23 +85,16 @@ npm start
 
 ## Usage
 
-### Time Tracking
+### Viewing Activity
 1. **Open any card** on your Trello board
 2. **Click "Time Tracker"** button on the card
-3. **Start the timer** when you begin working
-4. **Stop the timer** when you finish
-5. **View time entries** and total time tracked
-
-### Manual Time Entry
-1. Open the Time Tracker on any card
-2. Enter hours and minutes in the manual entry section
-3. Add a description (optional)
-4. Click "Add Entry"
+3. Review how long the card has stayed in each list
+4. Check the movement history for recent changes
 
 ### Settings Configuration
 1. Open the Time Tracker
 2. Go to the Settings section
-3. **Enable auto-tracking**: Automatically start timer when card moves to "In Progress"
+3. **Trigger Lists**: Enter list names that should add cards to the daily report
 4. **Set report email**: Enter email address for daily reports
 5. Click "Save Settings"
 
@@ -128,16 +119,16 @@ powerup/
 ## Power-Up Capabilities
 
 ### Card Buttons
-- **Time Tracker**: Opens the time tracking interface
+- **Time Tracker**: Opens the activity interface
 
 ### Card Detail Badges
-- **Total Time**: Shows total time tracked as a blue badge
+- **Total Time**: Shows total time spent across lists
 
 ### Board Buttons
 - **Generate Report**: Manually trigger report generation
 
 ### Card Back Section
-- **Timer Interface**: Full time tracking and history interface
+- **Activity Interface**: View list durations and movement history
 
 ## API Endpoints
 
@@ -182,18 +173,17 @@ CMD ["npm", "start"]
 
 ## Scheduled Tasks
 
-The server runs a cron job that executes daily at 5 PM Central Time (11 PM UTC):
-- Collects time tracking data from all boards
+- Collects card activity data from all boards
 - Generates HTML reports
 - Sends reports via email to configured addresses
 
 ## Data Storage
 
-### Trello Storage
-- **Time Entries**: Stored as shared card data
+-### Trello Storage
 - **Movement Entries**: Stored as shared card data
 - **Settings**: Stored as shared board data
-- **Timer State**: Stored as private card data
+- **List Durations**: Stored as shared card data
+- **Trigger Flags**: Stored as shared card data
 
 ### Server Storage
 - **Board Settings**: In-memory storage (use database for production)
@@ -204,15 +194,15 @@ The server runs a cron job that executes daily at 5 PM Central Time (11 PM UTC):
 1. **Environment Variables**: Keep sensitive data in environment variables
 2. **HTTPS**: Use HTTPS in production
 3. **Email Security**: Use app-specific passwords, not account passwords
-4. **Data Privacy**: Time tracking data is stored in Trello's secure storage
+4. **Data Privacy**: Activity data is stored in Trello's secure storage
 
 ## Customization
 
 ### Styling
 Edit `styles.css` to customize the appearance of the Power-Up interface.
 
-### Timer Behavior
-Modify timer functions in `power-up.js` to change timer behavior or add features.
+### List Tracking Logic
+Adjust list duration handling in `power-up.js` to fit your workflow.
 
 ### Report Format
 Update the `generateHTMLReport()` function in `server.js` to customize report appearance.
