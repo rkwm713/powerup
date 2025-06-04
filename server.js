@@ -8,8 +8,19 @@ const fs = require('fs').promises;
 // Load environment variables
 require('dotenv').config();
 
+console.log('🚀 Starting Time Tracker Power-Up server...');
+console.log('📁 Current directory:', __dirname);
+console.log('🔧 Node.js version:', process.version);
+console.log('📊 Environment variables:');
+console.log('  - PORT:', process.env.PORT || 'not set (will use 3000)');
+console.log('  - NODE_ENV:', process.env.NODE_ENV || 'not set');
+console.log('  - EMAIL_USER:', process.env.EMAIL_USER ? 'configured' : 'not set');
+console.log('  - SMTP_HOST:', process.env.SMTP_HOST || 'not set');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+console.log('🌐 Server will listen on port:', PORT);
 
 // Middleware
 app.use(cors());
@@ -280,8 +291,17 @@ app.get('/health', (req, res) => {
 
 // Start server
 app.listen(PORT, () => {
-    console.log(`Time Tracker Power-Up server running on port ${PORT}`);
-    console.log(`Daily reports scheduled for 5 PM Central Time (11 PM UTC)`);
+    console.log('✅ Time Tracker Power-Up server running on port', PORT);
+    console.log('🔗 Server URL: http://localhost:' + PORT);
+    console.log('📧 Daily reports scheduled for 5 PM Central Time (11 PM UTC)');
+    console.log('🎯 Server ready to accept requests!');
+}).on('error', (err) => {
+    console.error('❌ Server failed to start:', err);
+    console.error('🔧 Error details:', err.message);
+    if (err.code === 'EADDRINUSE') {
+        console.error('💡 Port', PORT, 'is already in use. Try a different port.');
+    }
+    process.exit(1);
 });
 
 module.exports = app; 
